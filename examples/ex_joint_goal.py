@@ -13,7 +13,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 
 from pymoveit2 import MoveIt2, MoveIt2State
-from pymoveit2.robots import panda as robot
+from pymoveit2.robots import ur as robot
 
 def main():
     rclpy.init()
@@ -31,7 +31,6 @@ def main():
             -0.7853981633974483,
             0.0,
             1.5707963267948966,
-            0.7853981633974483,
         ],
     )
     node.declare_parameter("synchronous", True)
