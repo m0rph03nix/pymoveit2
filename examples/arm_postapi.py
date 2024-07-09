@@ -9,21 +9,26 @@ from pymoveit2.robots import ur as robot
 from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
+from std_srvs.srv import Trigger
 
 # Create FastAPI app
 app = FastAPI()
 
-# Define request model
+# Define request model for movement
 class MoveRequest(BaseModel):
     joint_positions: list[float]
     synchronous: bool = True
     cancel_after_secs: float = 0.0
 
+# Define request model for gripper control
+class GraspRequest(BaseModel):
+    service_name: str
+
 # ROS2 Initialization
 rclpy.init()
 
 # Create node for this example
-node = Node("ex_joint_goal")
+node = Node("gra_postapi")
 
 # Declare parameter for joint positions
 node.declare_parameter(
@@ -33,8 +38,8 @@ node.declare_parameter(
         -1.5708,
         -2.827,
         1.3521,
-        0.0 ,
-        0.0 ,   
+        0.0,
+        0.0,
     ],
 )
 node.declare_parameter("synchronous", True)
@@ -118,8 +123,27 @@ async def move_robot(request: MoveRequest):
             "result_error_code": future.result().result.error_code
         }
 
+@app.post("/grasp")
+async def control_gripper(request: GraspRequest):
+    service_name = request.service_name
+
+    client = node.create_client(Trigger, service_name)
+    if not client.wait_for_service(timeout_sec=5.0):
+        return {"error": f"Service {service_name} not available"}
+
+    request = Trigger.Request()
+    future = client.call_async(request)
+
+    while not future.done():
+        rclpy.spin_once(node, timeout_sec=1.0)
+
+    response = future.result()
+    if response.success:
+        return {"status": "Gripper action completed", "message": response.message}
+    else:
+        return {"status": "Gripper action failed", "message": response.message}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
     rclpy.shutdown()
     executor_thread.join()
-        
