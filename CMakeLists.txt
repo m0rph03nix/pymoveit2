@@ -4,6 +4,9 @@ project(pymoveit2)
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
+# find_package(rclpy REQUIRED)
+# find_package(gra_interfaces REQUIRED)
+# find_package(builtin_interfaces REQUIRED)
 
 # Install Python package
 ament_python_install_package(pymoveit2)
