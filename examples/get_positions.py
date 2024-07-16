@@ -6,7 +6,7 @@ from sensor_msgs.msg import JointState
 
 class JointStateListener(Node):
     def __init__(self):
-        super().__init__('joint_state_listener')
+        super().__init__('ur_get_positions')
         self.subscription = self.create_subscription(
             JointState,
             '/joint_states',
