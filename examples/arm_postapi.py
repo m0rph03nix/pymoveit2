@@ -24,48 +24,56 @@ class MoveRequest(BaseModel):
 class GraspRequest(BaseModel):
     service_name: str
 
-# ROS2 Initialization
-rclpy.init()
+def create_ros2_node():
+    # ROS2 Initialization
+    rclpy.init()
 
-# Create node for this example
-node = Node("gra_postapi")
+    # Create node for this example
+    node = Node("gra_postapi")
 
-# Declare parameter for joint positions
-node.declare_parameter(
-    "joint_positions",
-    [
-        -1.5708,
-        -1.5708,
-        -2.827,
-        1.3521,
-        0.0,
-        0.0,
-    ],
-)
-node.declare_parameter("synchronous", True)
-# If non-positive, don't cancel. Only used if synchronous is False
-node.declare_parameter("cancel_after_secs", 0.0)
-# Planner ID
-node.declare_parameter("planner_id", "RRTConnectkConfigDefault")
+    # Declare parameter for joint positions
+    node.declare_parameter(
+        "joint_positions",
+        [
+            -1.5708,
+            -1.5708,
+            -2.827,
+            1.3521,
+            0.0,
+            0.0,
+        ],
+    )
+    node.declare_parameter("synchronous", True)
+    # If non-positive, don't cancel. Only used if synchronous is False
+    node.declare_parameter("cancel_after_secs", 0.0)
+    # Planner ID
+    node.declare_parameter("planner_id", "RRTConnectkConfigDefault")
 
-# Create callback group that allows execution of callbacks in parallel without restrictions
-callback_group = ReentrantCallbackGroup()
+    return node
 
-# Create MoveIt 2 interface
-moveit2 = MoveIt2(
-    node=node,
-    joint_names=robot.joint_names(),
-    base_link_name=robot.base_link_name(),
-    end_effector_name=robot.end_effector_name(),
-    group_name=robot.MOVE_GROUP_ARM,
-    callback_group=callback_group,
-)
-moveit2.planner_id = (
-    node.get_parameter("planner_id").get_parameter_value().string_value
-)
+def create_moveit2_interface(node):
+    # Create callback group that allows execution of callbacks in parallel without restrictions
+    callback_group = ReentrantCallbackGroup()
+
+    # Create MoveIt 2 interface
+    moveit2 = MoveIt2(
+        node=node,
+        joint_names=robot.joint_names(),
+        base_link_name=robot.base_link_name(),
+        end_effector_name=robot.end_effector_name(),
+        group_name=robot.MOVE_GROUP_ARM,
+        callback_group=callback_group,
+    )
+    moveit2.planner_id = node.get_parameter("planner_id").get_parameter_value().string_value
+
+    return moveit2
+
+# Create ROS2 node and MoveIt2 interface
+node = create_ros2_node()
+moveit2 = create_moveit2_interface(node)
 
 # Spin the node in background thread(s) and wait a bit for initialization
-executor = rclpy.executors.MultiThreadedExecutor(2)
+executor = rclpy.executors.MultiThreadedExecutor()
 executor.add_node(node)
 executor_thread = Thread(target=executor.spin, daemon=True)
 executor_thread.start()
@@ -86,7 +94,7 @@ async def move_robot(request: MoveRequest):
     moveit2.move_to_configuration(joint_positions)
     if synchronous:
         # Note: the same functionality can be achieved by setting
-        # `synchronous:=false` and `cancel_after_secs` to a negative value.
+        # synchronous:=false and cancel_after_secs to a negative value.
         moveit2.wait_until_executed()
         return {"status": "Movement completed synchronously"}
     else:
