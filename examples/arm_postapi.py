@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from threading import Thread
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
@@ -7,9 +8,8 @@ from pymoveit2 import MoveIt2, MoveIt2State
 from pymoveit2.robots import ur as robot
 from fastapi import FastAPI
 from pydantic import BaseModel
-from std_srvs.srv import Trigger
 import uvicorn
-import asyncio
+from std_srvs.srv import Trigger
 
 # Create FastAPI app
 app = FastAPI()
@@ -64,6 +64,13 @@ moveit2.planner_id = (
     node.get_parameter("planner_id").get_parameter_value().string_value
 )
 
+# Spin the node in background thread(s) and wait a bit for initialization
+executor = rclpy.executors.MultiThreadedExecutor(2)
+executor.add_node(node)
+executor_thread = Thread(target=executor.spin, daemon=True)
+executor_thread.start()
+node.create_rate(1.0).sleep()
+
 # Scale down velocity and acceleration of joints (percentage of maximum)
 moveit2.max_velocity = 0.5
 moveit2.max_acceleration = 0.5
@@ -78,33 +85,42 @@ async def move_robot(request: MoveRequest):
     node.get_logger().info(f"Moving to {{joint_positions: {list(joint_positions)}}}")
     moveit2.move_to_configuration(joint_positions)
     if synchronous:
+        # Note: the same functionality can be achieved by setting
+        # `synchronous:=false` and `cancel_after_secs` to a negative value.
         moveit2.wait_until_executed()
         return {"status": "Movement completed synchronously"}
     else:
-        node.get_logger().info(f"Current State: {moveit2.query_state()}")
+        # Wait for the request to get accepted (i.e., for execution to start)
+        print("Current State: " + str(moveit2.query_state()))
         rate = node.create_rate(10)
         while moveit2.query_state() != MoveIt2State.EXECUTING:
-            await asyncio.sleep(0.1)
+            rate.sleep()
 
+        # Get the future
+        print("Current State: " + str(moveit2.query_state()))
         future = moveit2.get_execution_future()
 
+        # Cancel the goal
         if cancel_after_secs > 0.0:
-            await asyncio.sleep(cancel_after_secs)
-            node.get_logger().info("Cancelling goal")
+            # Sleep for the specified time
+            sleep_time = node.create_rate(cancel_after_secs)
+            sleep_time.sleep()
+            # Cancel the goal
+            print("Cancelling goal")
             moveit2.cancel_execution()
 
+        # Wait until the future is done
         while not future.done():
-            await asyncio.sleep(0.1)
+            rate.sleep()
 
-        result_status = future.result().status
-        result_error_code = future.result().result.error_code
-        node.get_logger().info(f"Result status: {result_status}")
-        node.get_logger().info(f"Result error code: {result_error_code}")
+        # Print the result
+        print("Result status: " + str(future.result().status))
+        print("Result error code: " + str(future.result().result.error_code))
 
         return {
             "status": "Movement completed asynchronously",
-            "result_status": result_status,
-            "result_error_code": result_error_code
+            "result_status": future.result().status,
+            "result_error_code": future.result().result.error_code
         }
 
 @app.post("/grasp")
@@ -115,12 +131,11 @@ async def control_gripper(request: GraspRequest):
     if not client.wait_for_service(timeout_sec=5.0):
         return {"error": f"Service {service_name} not available"}
 
-    trigger_request = Trigger.Request()
-    future = client.call_async(trigger_request)
+    request = Trigger.Request()
+    future = client.call_async(request)
 
     while not future.done():
         rclpy.spin_once(node, timeout_sec=1.0)
-        await asyncio.sleep(0.1)
 
     response = future.result()
     if response.success:
@@ -128,22 +143,7 @@ async def control_gripper(request: GraspRequest):
     else:
         return {"status": "Gripper action failed", "message": response.message}
 
-def main():
-    # Create an event loop for FastAPI and rclpy
-    async def ros_spin():
-        while rclpy.ok():
-            rclpy.spin_once(node, timeout_sec=0.1)
-            await asyncio.sleep(0.1)
-
-    # Run the ROS spin in the event loop
-    loop = asyncio.get_event_loop()
-    loop.create_task(ros_spin())
-
-    # Run the FastAPI server in the same event loop
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio")
-    server = uvicorn.Server(config)
-    loop.run_until_complete(server.serve())
-
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host="0.0.0.0", port=8000)
     rclpy.shutdown()
+    executor_thread.join()
