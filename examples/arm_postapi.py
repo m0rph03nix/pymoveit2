@@ -65,7 +65,7 @@ moveit2.planner_id = (
 )
 
 # Spin the node in background thread(s) and wait a bit for initialization
-executor = rclpy.executors.MultiThreadedExecutor(2)
+executor = rclpy.executors.MultiThreadedExecutor(1)
 executor.add_node(node)
 executor_thread = Thread(target=executor.spin, daemon=True)
 executor_thread.start()
