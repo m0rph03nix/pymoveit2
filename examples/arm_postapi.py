@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-#!/usr/bin/env python3
-
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
@@ -11,6 +9,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from std_srvs.srv import Trigger
 import uvicorn
+import asyncio
 
 # Create FastAPI app
 app = FastAPI()
@@ -85,18 +84,17 @@ async def move_robot(request: MoveRequest):
         node.get_logger().info(f"Current State: {moveit2.query_state()}")
         rate = node.create_rate(10)
         while moveit2.query_state() != MoveIt2State.EXECUTING:
-            await rate.sleep()
+            await asyncio.sleep(0.1)
 
         future = moveit2.get_execution_future()
 
         if cancel_after_secs > 0.0:
-            sleep_time = node.create_rate(cancel_after_secs)
-            await sleep_time.sleep()
+            await asyncio.sleep(cancel_after_secs)
             node.get_logger().info("Cancelling goal")
             moveit2.cancel_execution()
 
         while not future.done():
-            await rate.sleep()
+            await asyncio.sleep(0.1)
 
         result_status = future.result().status
         result_error_code = future.result().result.error_code
@@ -122,6 +120,7 @@ async def control_gripper(request: GraspRequest):
 
     while not future.done():
         rclpy.spin_once(node, timeout_sec=1.0)
+        await asyncio.sleep(0.1)
 
     response = future.result()
     if response.success:
@@ -131,13 +130,12 @@ async def control_gripper(request: GraspRequest):
 
 def main():
     # Create an event loop for FastAPI and rclpy
-    import asyncio
-
     async def ros_spin():
         while rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.1)
             await asyncio.sleep(0.1)
 
+    # Run the ROS spin in the event loop
     loop = asyncio.get_event_loop()
     loop.create_task(ros_spin())
 
