@@ -13,7 +13,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 
 from pymoveit2 import MoveIt2, MoveIt2State
-from pymoveit2.robots import ur as robot
+from pymoveit2.robots import aloha_bot as robot
 
 def main():
     rclpy.init()
@@ -25,12 +25,8 @@ def main():
     node.declare_parameter(
         "joint_positions",
         [
-            0.0,
-            0.0,
-            0.0,
-            -0.7853981633974483,
-            0.0,
-            1.5707963267948966,
+            -1.0,
+            1.0,
         ],
     )
     node.declare_parameter("synchronous", True)

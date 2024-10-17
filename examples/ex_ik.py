@@ -12,7 +12,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 
 from pymoveit2 import MoveIt2, MoveIt2State
-from pymoveit2.robots import ur as robot
+from pymoveit2.robots import aloha_bot as robot
 
 
 def main():
@@ -22,7 +22,7 @@ def main():
     node = Node("ex_ik")
 
     # Declare parameters for position and orientation
-    node.declare_parameter("position", [0.5, 0.0, 0.25])
+    node.declare_parameter("position", [0.214, -0.084, 0.15])
     node.declare_parameter("quat_xyzw", [1.0, 0.0, 0.0, 0.0])
     node.declare_parameter("synchronous", True)
 
@@ -58,6 +58,7 @@ def main():
     retval = None
     if synchronous:
         retval = moveit2.compute_ik(position, quat_xyzw)
+        moveit2.
     else:
         future = moveit2.compute_ik_async(position, quat_xyzw)
         if future is not None:
